@@ -1,0 +1,28 @@
+ARCHIVE NOTE: Historical results from Backstage v2.0, before later changes. Do NOT treat these as tests of v2.1.
+PASS Border reflection on four sides
+PASS Exact corner reflection stays in bounds
+PASS Fast swept capsule side cannot tunnel
+PASS Capsule endpoint reflection
+PASS Moving away from wall does not bounce twice
+PASS Shadow reflects both friendly and hostile shots
+PASS Third wall contact removes bullet
+PASS Enemy before wall receives hit before reflection
+PASS Ricochet deals double damage and awards points
+PASS Wooden chair absorbs shot
+PASS Friendly fire cannot hurt puppet
+PASS Hostile shot damages puppet once
+PASS Lamp warns before switching and rejects spam
+PASS Candy heals two and respects health cap
+PASS Full health leaves candy available
+PASS Candy expires
+PASS Two dashes consume stamina, third is blocked
+PASS Stamina recovers after delay
+PASS Idle dash does not consume stamina
+PASS Dash cannot tunnel through a shadow
+PASS Complete interactive tutorial
+PASS All three levels reach their intended ending
+PASS Restart clears all transient state
+PASS Defeat stops simulation
+PASS Boss victory clears hostile threats
+PASS Long sessions remain bounded on every level
+RESULT: 26 passed; 0 failed.

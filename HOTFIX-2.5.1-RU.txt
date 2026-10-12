@@ -1,0 +1,15 @@
+LARMES DE MARIONNETTE — HOTFIX 2.5.1
+
+Исправления
+1) Assets/Backstage/Scripts/StageUI.cs:173 — float W.Health преобразуется в целое число через Mathf.RoundToInt перед Mathf.Clamp. Исправлена ошибка CS0266.
+2) Packages/manifest.json — убраны ссылки на устаревшие/не перечисленные в списке модулей Unity 6 com.unity.modules.inputlegacy и com.unity.modules.textrendering. Оставлены аудио, IMGUI, декодирование изображений и снимки экрана. Это должно помочь с ошибкой 'invalid dependencies', но без подробного сообщения Package Manager нельзя подтвердить её точную причину.
+3) StoryAtlas.png.meta — старая неполная запись удалена: Unity создаст современный .meta при первом импорте. Сам атлас не удалён, чтобы сохранялся резервный ресурс.
+
+Как запускать
+- Распакуйте ZIP в отдельную папку и в Unity Hub выберите её как проект (каталог, в котором находятся Assets, Packages и ProjectSettings).
+- Используйте Unity Editor 6000.6.5f1, указанную в ProjectSettings/ProjectVersion.txt.
+- Дождитесь импортирования и перейдите в сцену Assets/Backstage/Scenes/Backstage.unity.
+- Если проблема с пакетами останется: раскройте ПЕРВУЮ ошибку в Console или покажите Editor.log с перечислением не найденных пакетов и версию Unity. Не удаляйте модули без этой информации.
+- Предупреждение Input Manager — о будущей устарелости, не ошибка компиляции.
+
+Проверка: исправленный текст кода, корректность JSON, целостность PNG/ZIP. Unity Editor недоступен, компиляцию и запуск в Play Mode здесь проверить невозможно.
