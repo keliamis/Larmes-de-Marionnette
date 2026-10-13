@@ -13,6 +13,7 @@ namespace UnityEngine
  public struct Color {public float r,g,b,a;public Color(float r,float g,float b,float a=1){this.r=r;this.g=g;this.b=b;this.a=a;}public static Color white=>new Color(1,1,1);public static Color Lerp(Color a,Color b,float t)=>new Color(a.r+(b.r-a.r)*t,a.g+(b.g-a.g)*t,a.b+(b.b-a.b)*t,a.a+(b.a-a.a)*t);}
  public static class Mathf
  {
+  public static float Pow(float a,float b)=>(float)Math.Pow(a,b);
   public const float PI=(float)Math.PI;
   public static float Clamp(float v,float a,float b)=>Math.Max(a,Math.Min(b,v));public static int Clamp(int v,int a,int b)=>Math.Max(a,Math.Min(b,v));public static float Clamp01(float v)=>Clamp(v,0,1);
   public static float Min(float a,float b)=>Math.Min(a,b);public static float Max(float a,float b)=>Math.Max(a,b);public static int Max(int a,int b)=>Math.Max(a,b);public static int Min(int a,int b)=>Math.Min(a,b);

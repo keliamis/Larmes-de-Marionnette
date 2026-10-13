@@ -25,8 +25,10 @@ namespace Backstage
                 float halfWidth=b.Width*.5f;
                 g.Quad(b.A-n*halfWidth,b.A+n*halfWidth,b.B+n*halfWidth,b.B-n*halfWidth,C("0B1221",.88f));
                 g.Disc(b.B,halfWidth,C("0B1221",.88f));
-                g.Line(b.A-n*halfWidth,b.B-n*halfWidth,.03f,C("8CE1DF",.65f));
-                g.Line(b.A+n*halfWidth,b.B+n*halfWidth,.03f,C("8CE1DF",.65f));
+                float pulse=Mathf.Max(w.Lamps[0].Pulse,w.Lamps[1].Pulse)/.65f;
+                Color edge=Color.Lerp(C("8CE1DF",.65f),C("FFE2A1",.95f),pulse);
+                g.Line(b.A-n*halfWidth,b.B-n*halfWidth,.03f+pulse*.025f,edge);
+                g.Line(b.A+n*halfWidth,b.B+n*halfWidth,.03f+pulse*.025f,edge);
             }
             for(int i=0;i<8;i++)
             {
@@ -60,7 +62,25 @@ namespace Backstage
             {
                 Color c=b.Friendly?(b.Bounces>0?teal:C("B4A5EF")):C("FF9D77");
                 g.Glow(b.Position,.26f,c); g.Line(b.Position-b.Velocity.normalized*.35f,b.Position,.075f,c);
-                g.Disc(b.Position,b.Friendly?.1f:.125f,C("FFF2CC"),12);
+                g.Disc(b.Position,b.Friendly? .1f:.125f,C("FFF2CC"),12);
+            }
+            if(w.State==PlayState.Playing)
+            {
+                foreach(ShotEcho echo in w.Echoes)
+                {
+                    float fade=Mathf.Pow(echo.Life/.65f,2);Color c=C("A3E4DB",fade*.55f);
+                    g.Line(echo.Origin,echo.Turn1,.025f,c);
+                    if(echo.Turns>1)g.Line(echo.Turn1,echo.Turn2,.025f,c);
+                    g.Line(echo.Turns>1?echo.Turn2:echo.Turn1,echo.End,.025f,c);
+                    g.Ring(echo.Turn1,.14f,.02f,c,16);
+                    if(echo.Turns>1)g.Ring(echo.Turn2,.14f,.02f,c,16);
+                }
+                foreach(StageAccent accent in w.Accents)
+                {
+                    float progress=1-accent.Life/accent.Duration;Color c=C(accent.Defeat?"F5CE88":"A3E4DB",(1-progress)*.65f);
+                    g.Ring(accent.Position,.12f+progress*(accent.Defeat? .9f:.38f),.035f*(1-progress)+.008f,c,24);
+                    if(accent.Defeat)for(int i=0;i<4;i++){Vector2 d=StageWorld.Rotate(Vector2.up,i*Mathf.PI*.5f+.4f);g.Line(accent.Position+d*(.18f+progress*.45f),accent.Position+d*(.36f+progress*.72f),.025f,c);}
+                }
             }
             foreach(Spark s in w.Sparks)
             {
@@ -337,13 +357,15 @@ namespace Backstage
             }
             float movement=Mathf.SmoothStep(0,1,Mathf.Clamp01((elapsed-5)/3.2f));
             Vector2 offset=new Vector2(movement*8.4f,-movement*.5f);
-            Puppet(w,time,offset);
-            Shadow(w.PuppetPosition+offset+new Vector2(-1.45f,-.65f),Vector2.right,Vector2.right,time,false);
+            Puppet(w,time,offset,false);
+            Shadow(w.PuppetPosition+offset+new Vector2(-1.45f,-.65f),Vector2.right,Vector2.right,time,false,false);
             for(int i=0;i<24;i++)
             {float x=Mathf.Sin(i*13.3f)*11,y=5.5f-Mathf.Repeat(time*.7f+i*.3f,10);Star(new Vector2(x,y),.055f,C("FFE8B9",.38f));}
         }
         void TutorialMarker(StageWorld w,float time)
         {
+            if(w.TutorialStep==5&&w.TutorialHealthIntro>0)return;
+            if(w.TutorialStep>=6)return;
             Vector2 p=w.Player+Vector2.up*1.3f;
             if(w.TutorialStep==1 && w.Enemies.Count>0)p=w.Enemies[0].Position;
             if(w.TutorialStep==2)p=w.Lamps[0].Position;
@@ -393,18 +415,19 @@ namespace Backstage
                 g.Rect(p.x-.08f,p.y+.17f,.16f,.2f,C("E6C791"));
                 g.Line(p+new Vector2(-.42f,.48f),p+new Vector2(.42f,.48f),.04f,dark);
             }
-            else // painted theatrical arch / toy horse silhouette
+            else // painted stage flat on a wooden support
             {
-                g.Rect(p.x-.49f,p.y-.44f,.98f,.16f,wood);
-                g.Line(p+new Vector2(-.3f,-.33f),p+new Vector2(-.28f,.67f),.11f,wood);
-                g.Line(p+new Vector2(.35f,-.33f),p+new Vector2(.35f,.67f),.11f,wood);
-                g.Ellipse(p+new Vector2(-.03f,.21f),.35f,.42f,C("DDC4A7"),26);
-                g.Triangle(p+new Vector2(-.33f,.26f),p+new Vector2(.1f,.95f),p+new Vector2(.35f,.26f),C("6E5B75"));
-                g.Ring(p+new Vector2(.04f,.32f),.23f,.04f,C("D7AF68",.6f),20);
-                g.Line(p+new Vector2(-.35f,.68f),p+new Vector2(.35f,.68f),.035f,C("E7D9C9"));
+                g.Line(p+new Vector2(-.30f,-.44f),p+new Vector2(-.26f,.03f),.12f,wood);
+                g.Line(p+new Vector2(.30f,-.44f),p+new Vector2(.26f,.03f),.12f,wood);
+                g.Rect(p.x-.53f,p.y-.13f,1.06f,.94f,C("846449"));
+                g.Rect(p.x-.42f,p.y-.03f,.84f,.74f,C("243449"));
+                g.Line(p+new Vector2(-.50f,.78f),p+new Vector2(.50f,.78f),.07f,C("C4A079"));
+                g.Line(p+new Vector2(-.50f,-.10f),p+new Vector2(.50f,-.10f),.07f,C("B88F68"));
+                Star(p+Vector2.up*.34f,.25f,C("D7AF68"));
+                g.Rect(p.x-.46f,p.y-.49f,.92f,.12f,C("71553E"));
             }
         }
-        void Puppet(StageWorld w,float time,Vector2 offset=default(Vector2))
+        void Puppet(StageWorld w,float time,Vector2 offset=default(Vector2),bool showStatus=true)
         {
             Vector2 p=w.PuppetPosition+offset; float bow=w.State==PlayState.Won?Mathf.Sin(time*3)*.12f:0;
             if(w.State!=PlayState.Won)
@@ -448,9 +471,12 @@ namespace Backstage
             g.Triangle(p+new Vector2(-.13f,1.18f),p+new Vector2(.16f,1.18f),p+new Vector2(-.01f,1.65f),C("A44E5A"));
             g.Ellipse(p+new Vector2(-.02f,1.14f),.41f,.09f,C("5B2736"));
             g.Disc(p+new Vector2(-.03f,1.81f),.08f,gold);
-            g.Ring(p,.98f,.022f,w.PuppetInvulnerable>0?rose:C("D7AF68",.26f));
-            g.Rect(p.x-.65f,p.y-1.12f,1.3f,.065f,C("392B38"));
-            g.Rect(p.x-.65f,p.y-1.12f,1.3f*Mathf.Max(0,w.PuppetHealth/12),.065f,gold);
+            if(showStatus)
+            {
+                g.Ring(p,.98f,.022f,w.PuppetInvulnerable>0?rose:C("D7AF68",.26f));
+                g.Rect(p.x-.65f,p.y-1.12f,1.3f,.065f,C("392B38"));
+                g.Rect(p.x-.65f,p.y-1.12f,1.3f*Mathf.Max(0,w.PuppetHealth/12),.065f,gold);
+            }
         }
 
         void Switch(StageLamp lamp,int index,float time)
@@ -464,7 +490,7 @@ namespace Backstage
             g.Line(p+Vector2.up*.51f,new Vector2(index==0?-10.9f:10.9f,6.35f),.018f,C("D7AF68",.42f));
         }
 
-        void Shadow(Vector2 p,Vector2 aim,Vector2 bodyDirection,float time,bool flash)
+        void Shadow(Vector2 p,Vector2 aim,Vector2 bodyDirection,float time,bool flash,bool armed=true)
         {
             Color edge=C("8AA6D9");
             Color body=C("0F1220");
@@ -481,8 +507,11 @@ namespace Backstage
                 Vector2 lower=p+new Vector2((i-1)*.26f+sway,-.39f-(i%2)*.05f);
                 g.Ellipse(lower,.21f,.18f,body,16);
             }
-            g.Line(p+aim*.14f,p+aim*.62f,.14f,C("8AA6D9",.8f));
-            g.Disc(p+aim*.66f,.1f,body,12);
+            if(armed)
+            {
+                g.Line(p+aim*.14f,p+aim*.62f,.14f,C("8AA6D9",.8f));
+                g.Disc(p+aim*.66f,.1f,body,12);
+            }
             g.Ellipse(eyes+Vector2.left*.08f,.04f,.065f,C("F6EFCE"),10);
             g.Ellipse(eyes+Vector2.right*.08f,.04f,.065f,C("F6EFCE"),10);
             g.Line(p+Vector2.down*.34f,p+Vector2.down*.34f+bodyDirection*.2f,.06f,C("7488B5",.8f));
@@ -499,8 +528,8 @@ namespace Backstage
             g.Line(p+new Vector2(-.25f,.78f),p+new Vector2(-.29f,.85f),.075f,trim);
             g.Line(p+new Vector2(.25f,.78f),p+new Vector2(.29f,.85f),.075f,trim);
             g.Ellipse(p,.34f,.38f,trim);g.Ellipse(p,.30f,.34f,fur);
-            g.Disc(p+new Vector2(-.12f,.07f),.055f,C("FFE4AF"));
-            g.Disc(p+new Vector2(.12f,.07f),.055f,C("FFE4AF"));
+            g.Disc(p+new Vector2(-.12f,.07f),.055f,C("F05D68"));
+            g.Disc(p+new Vector2(.12f,.07f),.055f,C("F05D68"));
             g.Disc(p+new Vector2(0,-.13f),.035f,C("B58278"));
             EnemyHealth(e,p+Vector2.up*1.04f,.8f);
         }
@@ -555,7 +584,7 @@ namespace Backstage
             g.Ellipse(p+new Vector2(0,.12f),.76f,.45f,C("B68A4E",opacity),24);
             for(int i=0;i<4;i++)
             {
-                float x=(i-1.5f)*.48f, length=.73f+(i==1 || i==2?.2f:0);
+                float x=(i-1.5f)*.48f, length=.73f+(i==1 || i==2? .2f:0);
                 g.Line(p+new Vector2(x,-.24f),p+new Vector2(x,-length),.35f,baseColor);
                 g.Disc(p+new Vector2(x,-length),.18f,baseColor);
                 g.Line(p+new Vector2(x-.1f,-.48f),p+new Vector2(x+.1f,-.48f),.024f,C("6B4D43",opacity));

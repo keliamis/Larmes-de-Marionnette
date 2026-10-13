@@ -12,11 +12,11 @@ namespace Backstage
         public EnemyKind Kind;
         public Vector2 Position;
         public float Health, MaxHealth, Cooldown, Age, MineTimer, Flash, LightTimer=8;
-        public float Radius { get { return Kind==EnemyKind.Puppeteer?1.12f:Kind==EnemyKind.Guard?.79f:Kind==EnemyKind.Mask?.62f:.43f; } }
+        public float Radius { get { return Kind==EnemyKind.Puppeteer?1.12f:Kind==EnemyKind.Guard? .79f:Kind==EnemyKind.Mask? .62f:.43f; } }
     }
     public sealed class Bullet
     {
-        public Vector2 Position, Velocity;
+        public Vector2 Position, Velocity, Origin, Turn1, Turn2;
         public bool Friendly;
         public float Life=4, Radius=.11f, BounceGrace;
         public int Bounces, LastShadow=-1;
@@ -24,12 +24,14 @@ namespace Backstage
     public sealed class Candy { public Vector2 Position; public float Life=20; }
     public sealed class Mine { public Vector2 Position; public float Age; }
     public sealed class Spark { public Vector2 Position, Velocity; public float Life, MaxLife; public Color Color; }
+    public sealed class ShotEcho {public Vector2 Origin,Turn1,Turn2,End;public int Turns;public float Life=.65f;}
+    public sealed class StageAccent {public Vector2 Position;public float Life,Duration;public bool Defeat;}
     public struct Barrier { public Vector2 A, B; public float Width; }
     public sealed class StageLamp
     {
         public Vector2 Position;
         public int Mode;
-        public float Pending, Cooldown;
+        public float Pending, Cooldown, Pulse;
     }
 
     public sealed class StageWorld
@@ -40,6 +42,8 @@ namespace Backstage
         public readonly List<Candy> Candies=new List<Candy>();
         public readonly List<Mine> Mines=new List<Mine>();
         public readonly List<Spark> Sparks=new List<Spark>();
+        public readonly List<ShotEcho> Echoes=new List<ShotEcho>();
+        public readonly List<StageAccent> Accents=new List<StageAccent>();
         public readonly List<Barrier> Barriers=new List<Barrier>();
         readonly System.Random random=new System.Random(715);
         public readonly Vector2[] Props={new Vector2(-7,1),new Vector2(6,-1),new Vector2(-1,-3.2f),new Vector2(4.5f,3)};
@@ -50,8 +54,12 @@ namespace Backstage
         public float WaveWait=1.5f, Shake;
         public int Wave, Score, RicochetHits, LightSwitches, Ricochets, Level=1, Kills, CandyTaken, CandySpawned, Dashes, TutorialStep;
         public int WaveCount {get { return 3; }}
-        public bool Tutorial;
+        public bool Tutorial,Encore;
         public float Stamina=100, StaminaDelay, TutorialMoved, TutorialFinishDelay;
+        public float TutorialHealthIntro, HealPulse;
+        public int EnemyHits, PlayerShots, PlayerDamageTaken, PuppetDamageTaken;
+        public int RicochetChain,BestRicochetChain;
+        public float ChainWindow,ChainToast;
         Vector2 dashDirection;
         public const float DashCost=34, StaminaRegen=25;
         public static readonly string[] LevelNames={"Репетиция","Сломанная сцена","Зал масок","Последняя нить"};
@@ -59,11 +67,14 @@ namespace Backstage
         public string Banner="Первый выход";
         public float BannerTime=3;
         public Action<float,float,float> Sound;
+        public Action HealSound;
 
-        public void Start(int level=1,bool tutorial=false)
+        public void Start(int level=1,bool tutorial=false,bool encore=false)
         {
-            Enemies.Clear(); Bullets.Clear(); Mines.Clear(); Sparks.Clear(); Candies.Clear();
-            Level=Mathf.Clamp(level,1,3);Tutorial=tutorial;TutorialStep=0;TutorialMoved=0;TutorialFinishDelay=0;
+            Enemies.Clear(); Bullets.Clear(); Mines.Clear(); Sparks.Clear(); Candies.Clear();Echoes.Clear();Accents.Clear();
+            RicochetChain=0;BestRicochetChain=0;ChainWindow=0;ChainToast=0;
+            Encore=encore&&!tutorial;Level=Encore?3:Mathf.Clamp(level,1,3);Tutorial=tutorial;TutorialStep=0;TutorialMoved=0;TutorialFinishDelay=0;
+            TutorialHealthIntro=0;HealPulse=0;EnemyHits=0;PlayerShots=0;PlayerDamageTaken=0;PuppetDamageTaken=0;
             Stamina=100;StaminaDelay=0;Dashes=0;CandyTaken=0;CandySpawned=0;Kills=0;Ricochets=0;
             if(Level==1){Props[0]=new Vector2(-7,1);Props[1]=new Vector2(6,-1);Props[2]=new Vector2(-1,-3.2f);Props[3]=new Vector2(4.5f,3);}
             else if(Level==2){Props[0]=new Vector2(-6,2);Props[1]=new Vector2(7,0);Props[2]=new Vector2(-3,-3.8f);Props[3]=new Vector2(2.7f,3);}
@@ -73,20 +84,22 @@ namespace Backstage
             Invulnerable=1.5f; FireCooldown=0; DashCooldown=0; DashTime=0;
             WaveWait=1.5f; Wave=0; Score=0; RicochetHits=0; LightSwitches=0;
             BossDefeated=false; Shake=0; State=PlayState.Playing;
-            foreach(StageLamp lamp in Lamps) { lamp.Mode=0; lamp.Pending=0; lamp.Cooldown=0; }
-            Banner=tutorial?"БЕЗОПАСНАЯ РЕПЕТИЦИЯ":LevelNames[Level].ToUpper(); BannerTime=3;
+            foreach(StageLamp lamp in Lamps) { lamp.Mode=0; lamp.Pending=0; lamp.Cooldown=0;lamp.Pulse=0; }
+            Banner=tutorial?"БЕЗОПАСНАЯ РЕПЕТИЦИЯ":Encore?"НА БИС · ПОСЛЕДНИЙ ВЫХОД":LevelNames[Level].ToUpper(); BannerTime=3;
             if(!tutorial){Candies.Add(new Candy{Position=new Vector2(0,-4.8f),Life=26});CandySpawned=1;}
             UpdateBarriers();
+            if(Encore)foreach(Candy c in Candies)c.Position=MoveActor(c.Position,Vector2.zero,.25f);
         }
         public Enemy Spawn(EnemyKind kind,Vector2 p)
         {
             float hp=kind==EnemyKind.Rabbit?3:kind==EnemyKind.Mask?7:kind==EnemyKind.Guard?12:38;
+            if(Encore&&kind==EnemyKind.Puppeteer)hp=42;
             var e=new Enemy {Kind=kind,Position=p,Health=hp,MaxHealth=hp,Cooldown=1.7f+(float)random.NextDouble(),MineTimer=3};
             Enemies.Add(e); return e;
         }
         public void NextWave()
         {
-            Wave++;Banner="АКТ "+Level+"  •  ВОЛНА "+Wave+" / "+WaveCount;BannerTime=2;
+            Wave++;Banner=(Encore?"НА БИС":"АКТ "+Level)+"  •  ВОЛНА "+Wave+" / "+WaveCount;BannerTime=2;
             // Each act teaches a different tactical problem, and each finale combines them.
             if(Level==1)
             {
@@ -103,6 +116,7 @@ namespace Backstage
             else
             {
                 Spawn(EnemyKind.Rabbit,new Vector2(-10,1));Spawn(EnemyKind.Mask,new Vector2(10,2));
+                if(Encore&&Wave==1)Spawn(EnemyKind.Rabbit,new Vector2(9,-4.1f));
                 if(Wave==2){Spawn(EnemyKind.Guard,new Vector2(-8,4.7f));Spawn(EnemyKind.Mask,new Vector2(8,-4.5f));}
                 if(Wave==3){Spawn(EnemyKind.Puppeteer,new Vector2(0,4.8f));Banner="КУКЛОВОД НА СЦЕНЕ";BannerTime=4;}
             }
@@ -113,15 +127,20 @@ namespace Backstage
         {
             if(State!=PlayState.Playing) return;
             dt=Mathf.Clamp(dt,0,.04f); Time+=dt;
+            HealPulse=Mathf.Max(0,HealPulse-dt);
+            ChainWindow=Mathf.Max(0,ChainWindow-dt);ChainToast=Mathf.Max(0,ChainToast-dt);
+            if(ChainWindow<=0)RicochetChain=0;
+            for(int i=Echoes.Count-1;i>=0;i--){Echoes[i].Life-=dt;if(Echoes[i].Life<=0)Echoes.RemoveAt(i);}
+            for(int i=Accents.Count-1;i>=0;i--){Accents[i].Life-=dt;if(Accents[i].Life<=0)Accents.RemoveAt(i);}
             Invulnerable=Mathf.Max(0,Invulnerable-dt); PuppetInvulnerable=Mathf.Max(0,PuppetInvulnerable-dt);
             FireCooldown-=dt; DashCooldown-=dt; DashTime-=dt; BannerTime-=dt; Shake=Mathf.Max(0,Shake-dt*1.5f);
             foreach(StageLamp lamp in Lamps)
             {
-                lamp.Cooldown=Mathf.Max(0,lamp.Cooldown-dt);
+                lamp.Cooldown=Mathf.Max(0,lamp.Cooldown-dt);lamp.Pulse=Mathf.Max(0,lamp.Pulse-dt);
                 if(lamp.Pending>0)
                 {
                     lamp.Pending=Mathf.Max(0,lamp.Pending-dt);
-                    if(lamp.Pending==0) {lamp.Mode=1-lamp.Mode; LightSwitches++; Beep(390,.12f,.08f);}
+                    if(lamp.Pending==0) {lamp.Mode=1-lamp.Mode;lamp.Pulse=.65f; LightSwitches++; Beep(390,.12f,.08f);}
                 }
             }
             UpdateBarriers();
@@ -136,7 +155,7 @@ namespace Backstage
             Player=MoveActor(Player,(DashTime>0?dashDirection:Vector2.ClampMagnitude(input.Move,1))*speed*dt,.48f);
             InCover=IsCovered(Player);
             if(input.Fire && FireCooldown<=0)
-            { Shoot(Player,Aim,true); FireCooldown=.22f; Beep(155,.055f,.045f); }
+            { Shoot(Player,Aim,true);PlayerShots++; FireCooldown=.22f; Beep(155,.055f,.045f); }
             if(!Tutorial)for(int i=Enemies.Count-1;i>=0;i--) UpdateEnemy(Enemies[i],dt);
             UpdateBullets(dt);
             if(!BossDefeated)UpdateMines(dt);
@@ -218,7 +237,7 @@ namespace Backstage
             if(Bullets.Count>=180)return;
             if(d.sqrMagnitude<.01f) d=Vector2.up;
             // Start just outside the shooter's centre; swept collision prevents firing through a nearby wall.
-            Bullets.Add(new Bullet{Position=p+d.normalized*.12f,Velocity=d.normalized*speed,Friendly=friendly});
+            Bullets.Add(new Bullet{Origin=p,Position=p+d.normalized*.12f,Velocity=d.normalized*speed,Friendly=friendly});
         }
         public bool TraceWall(Vector2 p,Vector2 delta,float radius,out float fraction,out Vector2 normal)
         {
@@ -260,7 +279,7 @@ namespace Backstage
                     {
                         if(b.Bounces>=2){remove=true;break;}
                         b.Velocity-=2*Vector2.Dot(b.Velocity,normal)*normal;b.Position+=normal*.003f;b.Bounces++;
-                        if(b.Friendly)Ricochets++;
+                        if(b.Friendly){Ricochets++;if(b.Bounces==1)b.Turn1=b.Position;else b.Turn2=b.Position;}
                         Burst(b.Position,new Color(.55f,.87f,.84f),5);Beep(780,.055f,.055f);
                         left*=1-Mathf.Clamp01(hit);continue;
                     }
@@ -269,8 +288,15 @@ namespace Backstage
                     if(kind==5)HurtPlayer();if(kind==6)HurtPuppet();
                     if(kind==4)
                     {
-                        Enemy e=Enemies[index];e.Health-=b.Bounces>0?2:1;e.Flash=.08f;
-                        if(b.Bounces>0){RicochetHits++;Score+=25;}
+                        Enemy e=Enemies[index];e.Health-=b.Bounces>0?2:1;e.Flash=.08f;EnemyHits++;
+                        if(b.Bounces>0)
+                        {
+                            RicochetHits++;Score+=25;
+                            if(Echoes.Count>=12)Echoes.RemoveAt(0);
+                            Echoes.Add(new ShotEcho{Origin=b.Origin,Turn1=b.Turn1,Turn2=b.Turn2,End=b.Position,Turns=b.Bounces});
+                            if(!Tutorial){RicochetChain=ChainWindow>0?RicochetChain+1:1;BestRicochetChain=Mathf.Max(BestRicochetChain,RicochetChain);ChainWindow=4;ChainToast=1.4f;Beep(440*Mathf.Pow(2,Mathf.Min(RicochetChain-1,5)/12f),.12f,.055f);}
+                        }
+                        Accent(b.Position,e.Health<=0);
                         Burst(b.Position,new Color(.6f,.85f,.85f),5);Beep(220,.05f,.035f);
                         if(e.Health<=0)
                         {
@@ -286,13 +312,19 @@ namespace Backstage
                 if(remove)Bullets.RemoveAt(i);
             }
         }
+        void Accent(Vector2 position,bool defeat)
+        {
+            if(Accents.Count>=20)Accents.RemoveAt(0);
+            float duration=defeat? .55f:.28f;
+            Accents.Add(new StageAccent{Position=position,Life=duration,Duration=duration,Defeat=defeat});
+        }
         void UpdateCandies(float dt)
         {
             for(int i=Candies.Count-1;i>=0;i--)
             {
                 Candy c=Candies[i];c.Life-=dt;
                 if((Player-c.Position).sqrMagnitude<.85f*.85f&&Health<6)
-                {Health=Mathf.Min(6,Health+2);Stamina=Mathf.Min(100,Stamina+20);CandyTaken++;Candies.RemoveAt(i);Burst(Player,new Color(.7f,1,.7f),18);Banner="КОНФЕТА: +2 ЗДОРОВЬЯ";BannerTime=1.5f;Beep(880,.16f,.1f);}
+                {Health=Mathf.Min(6,Health+2);Stamina=Mathf.Min(100,Stamina+20);CandyTaken++;Candies.RemoveAt(i);HealPulse=2.2f;Burst(Player,new Color(.7f,1,.7f),18);Banner="КОНФЕТА: +2 ЗДОРОВЬЯ";BannerTime=1.5f;if(HealSound!=null)HealSound();else Beep(880,.16f,.1f);}
                 else if(c.Life<=0)Candies.RemoveAt(i);
             }
         }
@@ -319,14 +351,19 @@ namespace Backstage
             else if(TutorialStep==3&&Ricochets>0){Dashes=0;TutorialAdvance(4,"Красиво! Остался рывок.");}
             else if(TutorialStep==4&&Dashes>0)
             {
-                TutorialAdvance(5,"Хорошо! Осмотрись, затем дойди до конфеты.");
-                Health=4;
-                Candies.Add(new Candy{Position=MoveActor(Player+Vector2.right*2.8f,Vector2.zero,.25f),Life=999});
+                TutorialAdvance(5,"Посмотри на сердца: сейчас не хватает двух.");
+                Health=4;TutorialHealthIntro=2.4f;
             }
-            else if(TutorialStep==5&&CandyTaken>0)
+            else if(TutorialStep==5)
             {
-                TutorialAdvance(6,"Репетиция завершена. Ты готова к первому акту.");
-                TutorialFinishDelay=2.5f;
+                TutorialHealthIntro=Mathf.Max(0,TutorialHealthIntro-dt);
+                if(TutorialHealthIntro<=0&&Candies.Count==0&&CandyTaken==0)
+                    Candies.Add(new Candy{Position=MoveActor(new Vector2(Mathf.Clamp(Player.x+2.8f,-9,9),-4.6f),Vector2.zero,.25f),Life=999});
+                if(CandyTaken>0)
+                {
+                    TutorialAdvance(6,"Сердца восстановлены. Ты готова к первому акту.");
+                    TutorialFinishDelay=2.5f;
+                }
             }
             else if(TutorialStep==6)
             {
@@ -351,12 +388,12 @@ namespace Backstage
         void HurtPlayer()
         {
             if(Tutorial||Invulnerable>0) return;
-            Health--;Invulnerable=1;Shake=.3f;Burst(Player,new Color(.2f,.9f,.9f),15);Beep(75,.2f,.13f);
+            Health--;PlayerDamageTaken++;Invulnerable=1;Shake=.3f;Burst(Player,new Color(.2f,.9f,.9f),15);Beep(75,.2f,.13f);
         }
         void HurtPuppet()
         {
             if(Tutorial||PuppetInvulnerable>0) return;
-            PuppetHealth--;PuppetInvulnerable=.6f;Shake=.22f;
+            PuppetHealth--;PuppetDamageTaken++;PuppetInvulnerable=.6f;Shake=.22f;
             Burst(PuppetPosition,new Color(1,.4f,.35f),14);Beep(110,.18f,.12f);
             Banner="ЗАЩИТИ КУКЛУ!";BannerTime=1.5f;
         }

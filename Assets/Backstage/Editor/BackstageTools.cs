@@ -38,10 +38,10 @@ namespace Backstage.Editor
         [MenuItem("Backstage/Проверить иллюстрации", priority=2)]
         public static void CheckStoryArt()
         {
-            int good=0;
+            int good=0;string[] names={"StoryLonely","StoryAwakens","StoryHand","StoryRevolt"};
             for(int i=0;i<4;i++)
             {
-                string path="Assets/Backstage/Resources/StoryPanel"+i+".bytes";
+                string path="Assets/Backstage/Resources/"+names[i]+".bytes";
                 TextAsset panel=AssetDatabase.LoadAssetAtPath<TextAsset>(path);
                 if(panel!=null&&panel.bytes!=null&&panel.bytes.Length>1000)
                 {
